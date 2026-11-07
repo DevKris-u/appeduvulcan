@@ -1,8 +1,46 @@
 import axios from 'axios';
-import * as cheerio from 'cheerio';
 import { VulcanContext } from '../models/VulcanModels';
 
-/* Dekodowanie podwójnego base64 bez Node.js 'buffer' (niedostępny w React Native). */
+/* ── Minimalny parser HTML bez Node.js stdlib (React Native nie ma 'buffer' ani 'node:stream') ── */
+
+/** Wyciąga wartość atrybutu `value` z <input name="X"> */
+function getInputValue(html: string, inputName: string): string | null {
+  const escaped = inputName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(
+    `<input[^>]*\\sname=["']${escaped}["'][^>]*\\svalue=["']([^"']*)["']`,
+    'i'
+  );
+  const match = html.match(regex);
+  return match ? match[1] : null;
+}
+
+/** Wyciąga pierwszy href z <a> zawierający podany fragment */
+function getLinkHref(html: string, hrefContains: string): string | null {
+  const escaped = hrefContains.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`<a[^>]*\\shref=["']([^"']*${escaped}[^"']*)["']`, 'i');
+  const match = html.match(regex);
+  return match ? match[1] : null;
+}
+
+/** Wyciąga atrybut action z pierwszego <form> */
+function getFormAction(html: string): string | null {
+  const regex = /<form[^>]*\\saction=["']([^"']*)["']/i;
+  const match = html.match(regex);
+  return match ? match[1] : null;
+}
+
+/** Zwraca listę {name, value} wszystkich <input> w HTML */
+function getFormInputs(html: string): Array<{ name: string; value: string }> {
+  const inputs: Array<{ name: string; value: string }> = [];
+  const regex = /<input[^>]*\\sname=["']([^"']*)["'][^>]*\\svalue=["']([^"']*)["']/gi;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(html)) !== null) {
+    inputs.push({ name: match[1], value: match[2] });
+  }
+  return inputs;
+}
+
+/* Dekodowanie podwójnego base64 bez Node.js 'buffer'. */
 function base64ToUtf8(base64: string): string {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -21,8 +59,7 @@ export class VulcanLoginHelper {
   async login(login: string, pass: string): Promise<VulcanContext> {
     // 1. Get login page and CSRF token
     const loginPageRes = await this.axiosInstance.get('https://eduvulcan.pl/logowanie');
-    const $ = cheerio.load(loginPageRes.data);
-    const csrfToken = $('input[name=__RequestVerificationToken]').val() as string;
+    const csrfToken = getInputValue(loginPageRes.data, '__RequestVerificationToken');
 
     if (!csrfToken) throw new Error('CSRF token not found');
 
@@ -39,8 +76,7 @@ export class VulcanLoginHelper {
 
     // 3. Get diary access link
     const accessRes = await this.axiosInstance.get('https://eduvulcan.pl/dostep-do-dziennika/');
-    const $access = cheerio.load(accessRes.data);
-    const diaryLink = $access('a[href*=/dziennik?]').first().attr('href');
+    const diaryLink = getLinkHref(accessRes.data, '/dziennik?');
 
     if (!diaryLink) throw new Error('Diary link not found');
     const absoluteDiaryLink = new URL(diaryLink, 'https://eduvulcan.pl').href;
@@ -86,16 +122,15 @@ export class VulcanLoginHelper {
     while (true) {
       const html = currentRes.data;
       if (typeof html === 'string' && html.includes('wresult') && html.includes('<form')) {
-        const $ = cheerio.load(html);
-        const $form = $('form').first();
-        const action = $form.attr('action');
+        const action = getFormAction(html);
         if (!action) break;
 
         const absoluteAction = new URL(action, currentRes.config.url).href;
         const formData = new URLSearchParams();
-        $form.find('input[name]').each((_, input) => {
-          formData.append($(input).attr('name')!, $(input).attr('value') || '');
-        });
+        const inputs = getFormInputs(html);
+        for (const input of inputs) {
+          formData.append(input.name, input.value);
+        }
 
         currentRes = await this.axiosInstance.post(absoluteAction, formData.toString(), {
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
