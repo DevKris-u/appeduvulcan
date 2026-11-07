@@ -113,7 +113,9 @@ export const MessageDetailSchema = z.object({
 export class ValidationError extends Error {
   constructor(public readonly issues: z.ZodIssue[]) {
     super(
-      `Błąd walidacji odpowiedzi API: ${issues.map((i) => i.path.join('.') + ': ' + i.message).join(', ')}`
+      `Błąd walidacji odpowiedzi API: ${issues
+        .map((i: any) => i.path.join('.') + ': ' + i.message)
+        .join(', ')}`
     );
     this.name = 'ValidationError';
   }
