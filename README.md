@@ -1,22 +1,65 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# EduVulcan Mobile
 
-# Run and deploy your AI Studio app
+Nieoficjalny klient mobilny dla polskiego dziennika elektronicznego **EDU Vulcan** (`uczen.eduvulcan.pl`, `wiadomosci.eduvulcan.pl`).
 
-This contains everything you need to run your app locally.
+## Co robi aplikacja
 
-View your app in AI Studio: https://ai.studio/apps/08146576-f546-4638-8098-d06683a49c95
+- Logowanie do konta Ucznia Vulcan (przez scraping strony logowania, bo Vulcan nie udostępnia oficjalnego API).
+- Pulpit: szczęśliwy numer, dzisiejszy plan lekcji, nadchodzące sprawdziany, frekwencja.
+- Plan zajęć: tygodniowy podział na dni z detalami lekcji (nauczyciel, sala, zmiany, odwołania).
+- Oceny: okresy klasyfikacyjne, przedmioty, średnie, szczegóły wpisów z wagami i datami.
+- Wiadomości: lista odbiorcza, czytanie treści wiadomości, oznaczenie jako przeczytane.
 
-## Run Locally
+## Stack
 
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+- React Native 0.76 + Expo SDK ~52
+- React 18.3, TypeScript (`strict`)
+- Zustand — stan globalny
+- Axios — warstwa API
+- react-native-paper (MD3) — UI
+- react-navigation — nawigacja (bottom tabs + stack)
+- react-native-safe-area-context, react-native-screens
 
+## Uruchomienie lokalnie
 
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
-7. If you have already published your app in AI Studio, please [request upload key reset](https://support.google.com/googleplay/android-developer/answer/9842756#zippy=%2Crequest-an-upload-key-reset) in Google Play Console.
+```bash
+npm install
+npx expo start
+```
+
+Aplikację można przetestować na telefonie w **Expo Go** (skanowanie kodu QR z terminala) lub na emulatorze Android (`npx expo run:android`).
+
+## Uwagi dotyczące uwierzytelniania
+
+Vulcan nie udostępnia oficjalnego API publicznego. Logowanie odbywa się przez pobranie strony logowania, wyciągnięcie tokena CSRF, wysłanie poświadczeń i przejście łańcucha przekierowań SSO. Każda zmiana w serwisie `eduvulcan.pl` może przerwać logowanie — wtedy konieczna jest aktualizacja kodu w `src/api/VulcanLoginHelper.pl`.
+
+## Struktura
+
+```
+src/
+  api/
+    VulcanLoginHelper.ts   # logowanie + SSO, wyciąganie kontekstu
+    VulcanRepository.ts    # wywołania API do Vulcan (oceny, plan, wiadomości, …)
+  models/
+    VulcanModels.ts        # interfejsy TS (wymagają uszczelnienia)
+  screens/
+    LoginScreen.tsx
+    DashboardScreen.tsx
+    TimetableScreen.tsx
+    GradesScreen.tsx
+    MessagesScreen.tsx
+  state/
+    useVulcanStore.ts      # Zustand: stan globalny + akcje
+```
+
+## Plany rozwoju (bliższe)
+
+1. Utrwalenie sesji (`expo-secure-store` / `async-storage`) — brak ponownego logowania po zamknięciu aplikacji.
+2. Silniejsze typowanie i walidacja odpowiedzi API (`zod`).
+3. Obsługa sieci (timeout, retry, wykrywanie offline).
+4. Poprawa strefy czasowej w planie zajęć (czas lokalny, nie UTC).
+5. Testy jednostkowe i CI.
+
+## Licencja
+
+Projekt nieoficjalny, nie affiliated z firmą Vulcan. Używaj na własną odpowiedzialność.
