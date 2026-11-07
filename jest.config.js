@@ -1,5 +1,5 @@
 module.exports = {
-  preset: 'react-native',
+  preset: 'jest-expo',
   testEnvironment: 'node',
   setupFiles: ['./jest.setup.js'],
   testMatch: ['**/__tests__/**/*.test.ts?(x)', '**/?(*.)+(spec|test).ts?(x)'],
@@ -7,5 +7,7 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
-  transformIgnorePatterns: ['node_modules/(?!(react-native|@react-native|react-native-paper)/)'],
+  transformIgnorePatterns: [
+    'node_modules/(?!(react-native|@react-native|react-native-paper|expo-modules-core|expo|@expo|@react-navigation|react-native-reanimated|react-native-gesture-handler|react-native-screens|react-native-safe-area-context|react-native-svg)/)',
+  ],
 };
