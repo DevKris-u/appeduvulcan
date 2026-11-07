@@ -1,6 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
-import { Text, Surface, Card, List, Portal, Modal, Button, IconButton } from 'react-native-paper';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  RefreshControl,
+  TouchableOpacity,
+  Button,
+} from 'react-native';
+import { Text, Surface, Card, List, Portal, Modal, IconButton, Divider } from 'react-native-paper';
 import { useVulcanStore } from '../state/useVulcanStore';
 import { ChevronRight, X } from 'lucide-react-native';
 
@@ -13,9 +20,15 @@ export default function GradesScreen() {
   }, []);
 
   const onRefresh = () => {
+    store.clearError();
     if (store.selectedPeriodId) {
       store.selectPeriod(store.selectedPeriodId);
     }
+  };
+
+  const onRetry = () => {
+    store.clearError();
+    store.loadClassificationPeriods();
   };
 
   const getSubjectName = (prz: any) => {
@@ -30,22 +43,55 @@ export default function GradesScreen() {
     if (v) return v;
     if (col.oceny && col.oceny.length > 0) {
       const first = col.oceny[0];
-      return typeof first === 'object' ? (first.wpis || first.wartosc || first.kod) : first;
+      return typeof first === 'object' ? first.wpis || first.wartosc || first.kod : first;
     }
     return '-';
   };
 
+  const subjectKey = (item: any, idx: number) => {
+    return item.id ? `subject-${item.id}` : `subject-${idx}-${item.przedmiotNazwa || ''}`;
+  };
+
+  const columnKey = (col: any, idx: number) => {
+    return `col-${idx}-${col.nazwa || col.wpis || col.ocena || ''}`;
+  };
+
+  if (store.error) {
+    return (
+      <View style={styles.container}>
+        <Surface style={styles.header} elevation={1}>
+          <Text variant="headlineSmall" style={styles.headerTitle}>
+            Oceny
+          </Text>
+        </Surface>
+        <View style={[styles.errorContainer, { marginTop: 24 }]}>
+          <Text variant="titleLarge" style={styles.errorTitle}>
+            Coś poszło nie tak
+          </Text>
+          <Text variant="bodyMedium" style={styles.errorMessage}>
+            {store.error.message}
+          </Text>
+          <View style={styles.retryButton}>
+            <Button title="Spróbuj ponownie" onPress={onRetry} />
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Surface style={styles.header} elevation={1}>
-        <Text variant="headlineSmall" style={styles.headerTitle}>Oceny</Text>
+        <Text variant="headlineSmall" style={styles.headerTitle}>
+          Oceny
+        </Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.periodScroll}>
           {store.classificationPeriods.map((period, idx) => {
-            const id = period.id || period.Id;
+            const id = period.id ?? period.Id;
             const isSelected = store.selectedPeriodId === id;
             return (
-              <TouchableOpacity 
-                key={idx} 
+              <TouchableOpacity
+                key={`period-${idx}-${id}`}
                 style={[styles.periodChip, isSelected && styles.periodChipSelected]}
                 onPress={() => id && store.selectPeriod(id)}
               >
@@ -58,11 +104,9 @@ export default function GradesScreen() {
         </ScrollView>
       </Surface>
 
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={store.isLoading} onRefresh={onRefresh} />
-        }
+        refreshControl={<RefreshControl refreshing={store.isLoading} onRefresh={onRefresh} />}
       >
         {store.grades.length === 0 && !store.isLoading ? (
           <View style={styles.emptyContainer}>
@@ -70,17 +114,20 @@ export default function GradesScreen() {
           </View>
         ) : (
           store.grades.map((item, idx) => (
-            <Card 
-              key={idx} 
-              style={styles.subjectCard} 
+            <Card
+              key={subjectKey(item, idx)}
+              style={styles.subjectCard}
               mode="contained"
               onPress={() => setSelectedSubject(item)}
             >
               <Card.Content style={styles.cardContent}>
                 <View style={styles.subjectInfo}>
-                  <Text variant="titleMedium" numberOfLines={1}>{getSubjectName(item.przedmiot || item.przedmiotNazwa)}</Text>
+                  <Text variant="titleMedium" numberOfLines={1}>
+                    {getSubjectName(item.przedmiot || item.przedmiotNazwa)}
+                  </Text>
                   <Text variant="bodySmall" style={styles.gradesSnippet}>
-                    {item.kolumnyOcenyCzastkowe?.map(c => getGradeValue(c)).join(', ') || 'Brak ocen'}
+                    {item.kolumnyOcenyCzastkowe?.map((c) => getGradeValue(c)).join(', ') ||
+                      'Brak ocen'}
                   </Text>
                 </View>
                 <View style={styles.subjectStats}>
@@ -96,8 +143,8 @@ export default function GradesScreen() {
       </ScrollView>
 
       <Portal>
-        <Modal 
-          visible={!!selectedSubject} 
+        <Modal
+          visible={!!selectedSubject}
           onDismiss={() => setSelectedSubject(null)}
           contentContainerStyle={styles.modal}
         >
@@ -112,18 +159,18 @@ export default function GradesScreen() {
               <ScrollView style={styles.gradeList}>
                 {selectedSubject.kolumnyOcenyCzastkowe?.map((col: any, idx: number) => (
                   <List.Item
-                    key={idx}
+                    key={columnKey(col, idx)}
                     title={getGradeValue(col)}
-                    description={`${col.nazwa || 'Ocena'} • waga: ${col.waga || col.wagaOceny || '-'}`}
+                    description={`${col.nazwa || 'Ocena'} • waga: ${col.waga ?? col.wagaOceny ?? '-'}`}
                     left={() => <Text style={styles.gradeLabel}>{getGradeValue(col)}</Text>}
                     right={() => <Text variant="bodySmall">{col.data?.substring(0, 10)}</Text>}
                     style={styles.gradeItem}
                   />
                 ))}
               </ScrollView>
-              <Button mode="contained" onPress={() => setSelectedSubject(null)} style={styles.closeBtn}>
-                Zamknij
-              </Button>
+              <View style={styles.closeBtn}>
+                <Button title="Zamknij" onPress={() => setSelectedSubject(null)} />
+              </View>
             </View>
           )}
         </Modal>
@@ -234,5 +281,22 @@ const styles = StyleSheet.create({
   },
   closeBtn: {
     marginTop: 16,
+  },
+  errorContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  errorTitle: {
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    textAlign: 'center',
+    marginBottom: 24,
+    opacity: 0.8,
+  },
+  retryButton: {
+    marginTop: 8,
   },
 });

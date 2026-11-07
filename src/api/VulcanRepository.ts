@@ -1,9 +1,52 @@
-import axios, { AxiosInstance } from 'axios';
-import { 
-  LuckyNumber, Lesson, Exam, Attendance, 
-  ClassificationPeriod, SubjectGrades, 
-  MessageListItem, MessageDetail, VulcanContext 
+import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axiosRetry from 'axios-retry';
+import {
+  Lesson,
+  Exam,
+  Attendance,
+  ClassificationPeriod,
+  SubjectGrades,
+  MessageListItem,
+  MessageDetail,
+  VulcanContext,
 } from '../models/VulcanModels';
+import {
+  validate,
+  validateArray,
+  ValidationError,
+  LessonsResponseSchema,
+  ExamsResponseSchema,
+  AttendanceResponseSchema,
+  ClassificationPeriodsResponseSchema,
+  GradesResponseSchema,
+  MessageBoxesResponseSchema,
+  ReceivedMessagesResponseSchema,
+  MessageDetailResponseSchema,
+  LuckyNumberResponseSchema,
+} from './validators';
+
+const REQUEST_TIMEOUT = 20_000; // ms
+const RETRY_ATTEMPTS = 3;
+
+function withRetryAndTimeout(instance: AxiosInstance): AxiosInstance {
+  axiosRetry(instance, {
+    retries: RETRY_ATTEMPTS,
+    retryDelay: (retryCount) => retryCount * 1000, // 1s, 2s, 3s
+    retryCondition: (error) => {
+      // Ponów tylko przy błędach sieciowych i 429/5xx
+      if (axiosRetry.isNetworkOrIdempotentRequestError(error)) return true;
+      const status = error.response?.status;
+      return status === 429 || (status !== undefined && status >= 500);
+    },
+  });
+
+  instance.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+    config.timeout = REQUEST_TIMEOUT;
+    return config;
+  });
+
+  return instance;
+}
 
 export class VulcanRepository {
   private api: AxiosInstance;
@@ -12,93 +55,112 @@ export class VulcanRepository {
 
   constructor(context: VulcanContext) {
     this.context = context;
-    this.api = axios.create({
-      baseURL: context.baseApiUrl,
-      withCredentials: true,
-    });
-    this.messagesApi = axios.create({
-      baseURL: context.baseMessagesApiUrl,
-      withCredentials: true,
-    });
+    this.api = withRetryAndTimeout(
+      axios.create({
+        baseURL: context.baseApiUrl,
+        withCredentials: true,
+      })
+    );
+    this.messagesApi = withRetryAndTimeout(
+      axios.create({
+        baseURL: context.baseMessagesApiUrl,
+        withCredentials: true,
+      })
+    );
+  }
+
+  private get contextKey() {
+    return this.context?.contextKey;
+  }
+
+  private get idDziennik() {
+    return this.context?.idDziennik;
   }
 
   async getLuckyNumber(): Promise<string> {
     const res = await this.api.get<string>('SzczesliwyNumerTablica', {
-      params: { key: this.context?.contextKey }
+      params: { key: this.contextKey },
     });
-    const text = res.data || 'brak';
-    return text.replace(/"/g, '') === 'null' ? 'brak' : text.replace(/"/g, '');
+    const text = validate(LuckyNumberResponseSchema, res.data, 'SzczesliwyNumerTablica') as
+      string | null;
+    const cleaned = text ? text.replace(/"/g, '') : null;
+    return cleaned === null || cleaned === 'null' || cleaned === '' ? 'brak' : cleaned;
   }
 
   async getDashboardTimetable(): Promise<Lesson[]> {
     const res = await this.api.get<Lesson[]>('PlanZajecTablica', {
-      params: { key: this.context?.contextKey }
+      params: { key: this.contextKey },
     });
-    return res.data;
+    return validateArray(LessonsResponseSchema, res.data, 'PlanZajecTablica');
   }
 
   async getDashboardExams(): Promise<Exam[]> {
     const res = await this.api.get<Exam[]>('SprawdzianyTablica', {
-      params: { key: this.context?.contextKey }
+      params: { key: this.contextKey },
     });
-    return res.data;
+    return validateArray(ExamsResponseSchema, res.data, 'SprawdzianyTablica');
   }
 
   async getDashboardAttendance(): Promise<Attendance> {
     const res = await this.api.get<Attendance>('FrekwencjaTablica', {
-      params: { key: this.context?.contextKey }
+      params: { key: this.contextKey },
     });
-    return res.data;
+    return validate(AttendanceResponseSchema, res.data, 'FrekwencjaTablica');
   }
 
   async getTimetable(dataOd: string, dataDo: string): Promise<Lesson[]> {
     const res = await this.api.get<Lesson[]>('PlanZajec', {
-      params: { 
-        key: this.context?.contextKey,
+      params: {
+        key: this.contextKey,
         dataOd,
         dataDo,
-        zakresDanych: 2
-      }
+        zakresDanych: 2,
+      },
     });
-    return res.data;
+    return validateArray(LessonsResponseSchema, res.data, 'PlanZajec');
   }
 
   async getClassificationPeriods(): Promise<ClassificationPeriod[]> {
     const res = await this.api.get<ClassificationPeriod[]>('OkresyKlasyfikacyjne', {
-      params: { 
-        key: this.context?.contextKey,
-        idDziennik: this.context?.idDziennik
-      }
+      params: {
+        key: this.contextKey,
+        idDziennik: this.idDziennik,
+      },
     });
-    return res.data;
+    return validateArray(ClassificationPeriodsResponseSchema, res.data, 'OkresyKlasyfikacyjne');
   }
 
   async getGrades(periodId: number): Promise<SubjectGrades[]> {
     const res = await this.api.get<{ ocenyPrzedmioty: SubjectGrades[] }>('Oceny', {
-      params: { 
-        key: this.context?.contextKey,
-        idOkresKlasyfikacyjny: periodId
-      }
+      params: {
+        key: this.contextKey,
+        idOkresKlasyfikacyjny: periodId,
+      },
     });
-    return res.data.ocenyPrzedmioty || [];
+    const parsed = validate<{ ocenyPrzedmioty?: SubjectGrades[] }>(
+      GradesResponseSchema,
+      res.data,
+      'Oceny'
+    );
+    return parsed.ocenyPrzedmioty ?? [];
   }
 
   async getMessageBoxes(): Promise<any[]> {
     const res = await this.messagesApi.get('Skrzynki');
-    return res.data;
+    return validate(MessageBoxesResponseSchema, res.data, 'Skrzynki');
   }
 
   async getReceivedMessages(): Promise<MessageListItem[]> {
     const res = await this.messagesApi.get<MessageListItem[]>('Odebrane', {
-      params: { idLastWiadomosc: 0, pageSize: 50 }
+      params: { idLastWiadomosc: 0, pageSize: 50 },
     });
-    return res.data;
+    return validateArray(ReceivedMessagesResponseSchema, res.data, 'Odebrane');
   }
 
   async getMessageDetails(key: string): Promise<MessageDetail> {
     const res = await this.messagesApi.get<MessageDetail>('WiadomoscSzczegoly', {
-      params: { apiGlobalKey: key }
+      params: { apiGlobalKey: key },
     });
-    return res.data;
+    return validate(MessageDetailResponseSchema, res.data, 'WiadomoscSzczegoly');
   }
 }

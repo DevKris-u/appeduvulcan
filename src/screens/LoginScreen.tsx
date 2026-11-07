@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { TextInput, Button, Text, Surface, useTheme, ActivityIndicator } from 'react-native-paper';
+import { StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { TextInput, Button, Text, Surface, useTheme } from 'react-native-paper';
 import { useVulcanStore } from '../state/useVulcanStore';
 import { VulcanLoginHelper } from '../api/VulcanLoginHelper';
 
@@ -9,7 +9,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const setContext = useVulcanStore(state => state.setContext);
+  const setContext = useVulcanStore((state) => state.setContext);
   const theme = useTheme();
 
   const handleLogin = async () => {
@@ -38,14 +38,14 @@ export default function LoginScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Surface style={styles.surface} elevation={2}>
-          <Text variant="headlineMedium" style={styles.title}>EduVulcan</Text>
-          <Text variant="bodyLarge" style={styles.subtitle}>Zaloguj się do swojego konta</Text>
+          <Text variant="headlineMedium" style={styles.title}>
+            EduVulcan
+          </Text>
+          <Text variant="bodyLarge" style={styles.subtitle}>
+            Zaloguj się do swojego konta
+          </Text>
 
-          {error && (
-            <Text style={[styles.error, { color: theme.colors.error }]}>
-              {error}
-            </Text>
-          )}
+          {error && <Text style={[styles.error, { color: theme.colors.error }]}>{error}</Text>}
 
           <TextInput
             label="Email"

@@ -25,7 +25,7 @@ export class VulcanLoginHelper {
     formData.append('__RequestVerificationToken', csrfToken);
 
     await this.axiosInstance.post('https://eduvulcan.pl/logowanie', formData.toString(), {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
 
     // 3. Get diary access link
@@ -68,7 +68,7 @@ export class VulcanLoginHelper {
       baseApiUrl,
       studentId: ids[0],
       idDziennik: ids[1],
-      baseMessagesApiUrl
+      baseMessagesApiUrl,
     };
   }
 
@@ -89,7 +89,7 @@ export class VulcanLoginHelper {
         });
 
         currentRes = await this.axiosInstance.post(absoluteAction, formData.toString(), {
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         });
       } else {
         break;

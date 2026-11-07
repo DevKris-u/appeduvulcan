@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
-import { Text, Surface, Card, List, Portal, Modal, IconButton, Divider, useTheme } from 'react-native-paper';
+import React, { useEffect } from 'react';
+import { View, StyleSheet, ScrollView, RefreshControl, Button } from 'react-native';
+import { Text, Surface, Card, IconButton, Divider, useTheme } from 'react-native-paper';
 import { useVulcanStore } from '../state/useVulcanStore';
-import { Mail, MailOpen, ArrowLeft, Send } from 'lucide-react-native';
+import { Mail, MailOpen, ArrowLeft } from 'lucide-react-native';
 
 export default function MessagesScreen() {
   const store = useVulcanStore();
@@ -13,6 +13,12 @@ export default function MessagesScreen() {
   }, []);
 
   const onRefresh = () => {
+    store.clearError();
+    store.loadMessages();
+  };
+
+  const onRetry = () => {
+    store.clearError();
     store.loadMessages();
   };
 
@@ -20,11 +26,13 @@ export default function MessagesScreen() {
     return (
       <View style={styles.container}>
         <Surface style={styles.detailHeader} elevation={1}>
-          <IconButton 
-            icon={() => <ArrowLeft size={24} color="#333" />} 
-            onPress={() => store.clearSelectedMessage()} 
+          <IconButton
+            icon={() => <ArrowLeft size={24} color="#333" />}
+            onPress={() => store.clearSelectedMessage()}
           />
-          <Text variant="titleMedium" style={styles.detailHeaderTitle}>Wiadomość</Text>
+          <Text variant="titleMedium" style={styles.detailHeaderTitle}>
+            Wiadomość
+          </Text>
         </Surface>
         <ScrollView contentContainerStyle={styles.detailContent}>
           <Text variant="headlineSmall" style={styles.detailSubject}>
@@ -39,9 +47,11 @@ export default function MessagesScreen() {
             <View>
               <Text variant="titleMedium">{store.selectedMessage.nadawca}</Text>
               <Text variant="bodySmall" style={{ opacity: 0.6 }}>
-                Do: {store.selectedMessage.adresaci?.map(a => a.nazwa).join(', ') || 'mnie'}
+                Do: {store.selectedMessage.adresaci?.map((a) => a.nazwa).join(', ') || 'mnie'}
               </Text>
-              <Text variant="labelSmall" style={{ opacity: 0.5 }}>{store.selectedMessage.data?.replace('T', ' ')}</Text>
+              <Text variant="labelSmall" style={{ opacity: 0.5 }}>
+                {store.selectedMessage.data?.replace('T', ' ')}
+              </Text>
             </View>
           </View>
           <Divider style={styles.divider} />
@@ -53,45 +63,82 @@ export default function MessagesScreen() {
     );
   }
 
+  if (store.error) {
+    return (
+      <View style={styles.container}>
+        <Surface style={styles.header} elevation={1}>
+          <Text variant="headlineSmall" style={styles.headerTitle}>
+            Wiadomości
+          </Text>
+        </Surface>
+        <View style={[styles.errorContainer, { marginTop: 24 }]}>
+          <Text variant="titleLarge" style={styles.errorTitle}>
+            Coś poszło nie tak
+          </Text>
+          <Text variant="bodyMedium" style={styles.errorMessage}>
+            {store.error.message}
+          </Text>
+          <View style={styles.retryButton}>
+            <Button title="Spróbuj ponownie" onPress={onRetry} />
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Surface style={styles.header} elevation={1}>
-        <Text variant="headlineSmall" style={styles.headerTitle}>Wiadomości</Text>
+        <Text variant="headlineSmall" style={styles.headerTitle}>
+          Wiadomości
+        </Text>
       </Surface>
 
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={store.isLoading} onRefresh={onRefresh} />
-        }
+        refreshControl={<RefreshControl refreshing={store.isLoading} onRefresh={onRefresh} />}
       >
         {store.messages.length === 0 && !store.isLoading ? (
           <View style={styles.emptyContainer}>
             <Mail size={48} color="#ccc" />
-            <Text variant="bodyLarge" style={{ marginTop: 12 }}>Brak wiadomości</Text>
+            <Text variant="bodyLarge" style={{ marginTop: 12 }}>
+              Brak wiadomości
+            </Text>
           </View>
         ) : (
-          store.messages.map((msg, idx) => (
-            <Card 
-              key={idx} 
-              style={[styles.messageCard, !msg.przeczytana && styles.unreadCard]} 
+          store.messages.map((msg) => (
+            <Card
+              key={msg.apiGlobalKey}
+              style={[styles.messageCard, !msg.przeczytana && styles.unreadCard]}
               mode="contained"
               onPress={() => store.loadMessageDetails(msg.apiGlobalKey)}
             >
               <Card.Content style={styles.cardContent}>
                 <View style={styles.msgIcon}>
-                  {msg.przeczytana ? <MailOpen size={24} color="#999" /> : <Mail size={24} color={theme.colors.primary} />}
+                  {msg.przeczytana ? (
+                    <MailOpen size={24} color="#999" />
+                  ) : (
+                    <Mail size={24} color={theme.colors.primary} />
+                  )}
                 </View>
                 <View style={styles.msgInfo}>
                   <View style={styles.msgTopRow}>
-                    <Text variant="titleMedium" style={!msg.przeczytana && styles.boldText} numberOfLines={1}>
+                    <Text
+                      variant="titleMedium"
+                      style={!msg.przeczytana && styles.boldText}
+                      numberOfLines={1}
+                    >
                       {msg.nadawca}
                     </Text>
                     <Text variant="labelSmall" style={styles.msgDate}>
                       {msg.data?.substring(0, 10)}
                     </Text>
                   </View>
-                  <Text variant="bodyMedium" style={[styles.msgSubject, !msg.przeczytana && styles.boldText]} numberOfLines={1}>
+                  <Text
+                    variant="bodyMedium"
+                    style={[styles.msgSubject, !msg.przeczytana && styles.boldText]}
+                    numberOfLines={1}
+                  >
                     {msg.temat || '(Bez tematu)'}
                   </Text>
                   <Text variant="bodySmall" style={styles.msgSnippet} numberOfLines={1}>
@@ -208,5 +255,22 @@ const styles = StyleSheet.create({
   },
   messageBody: {
     lineHeight: 24,
+  },
+  errorContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  errorTitle: {
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    textAlign: 'center',
+    marginBottom: 24,
+    opacity: 0.8,
+  },
+  retryButton: {
+    marginTop: 8,
   },
 });

@@ -1,9 +1,10 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { PaperProvider, MD3LightTheme as DefaultTheme } from 'react-native-paper';
-import { Layout, Dashboard, Calendar, GraduationCap, Mail, LogIn } from 'lucide-react-native';
+import { ActivityIndicator } from 'react-native';
+import { Layout, Calendar, GraduationCap, Mail, LogIn } from 'lucide-react-native';
 import { useVulcanStore } from './src/state/useVulcanStore';
 import LoginScreen from './src/screens/LoginScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
@@ -32,24 +33,24 @@ function HomeTabs() {
         headerShown: false,
       }}
     >
-      <Tab.Screen 
-        name="Pulpit" 
-        component={DashboardScreen} 
+      <Tab.Screen
+        name="Pulpit"
+        component={DashboardScreen}
         options={{ tabBarIcon: ({ color, size }) => <Layout color={color} size={size} /> }}
       />
-      <Tab.Screen 
-        name="Plan" 
-        component={TimetableScreen} 
+      <Tab.Screen
+        name="Plan"
+        component={TimetableScreen}
         options={{ tabBarIcon: ({ color, size }) => <Calendar color={color} size={size} /> }}
       />
-      <Tab.Screen 
-        name="Oceny" 
-        component={GradesScreen} 
+      <Tab.Screen
+        name="Oceny"
+        component={GradesScreen}
         options={{ tabBarIcon: ({ color, size }) => <GraduationCap color={color} size={size} /> }}
       />
-      <Tab.Screen 
-        name="Wiadomości" 
-        component={MessagesScreen} 
+      <Tab.Screen
+        name="Wiadomości"
+        component={MessagesScreen}
         options={{ tabBarIcon: ({ color, size }) => <Mail color={color} size={size} /> }}
       />
     </Tab.Navigator>
@@ -57,7 +58,21 @@ function HomeTabs() {
 }
 
 export default function App() {
-  const context = useVulcanStore(state => state.context);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const context = useVulcanStore((state) => state.context);
+  const initializeSession = useVulcanStore((state) => state.initializeSession);
+
+  useEffect(() => {
+    initializeSession().finally(() => setIsInitializing(false));
+  }, [initializeSession]);
+
+  if (isInitializing) {
+    return (
+      <PaperProvider theme={theme}>
+        <ActivityIndicator style={{ flex: 1, alignSelf: 'center' }} />
+      </PaperProvider>
+    );
+  }
 
   return (
     <PaperProvider theme={theme}>

@@ -1,10 +1,21 @@
 import { create } from 'zustand';
-import { 
-  LuckyNumber, Lesson, Exam, Attendance, 
-  ClassificationPeriod, SubjectGrades, 
-  MessageListItem, MessageDetail, VulcanContext 
+import {
+  Lesson,
+  Exam,
+  ClassificationPeriod,
+  SubjectGrades,
+  MessageListItem,
+  MessageDetail,
+  VulcanContext,
 } from '../models/VulcanModels';
 import { VulcanRepository } from '../api/VulcanRepository';
+import { ValidationError } from '../api/validators';
+import { saveSession, clearSession, loadSession } from '../storage/session';
+
+interface AppError {
+  message: string;
+  type: 'network' | 'validation' | 'auth' | 'unknown';
+}
 
 interface VulcanState {
   context: VulcanContext | null;
@@ -20,7 +31,7 @@ interface VulcanState {
   messages: MessageListItem[];
   selectedMessage: MessageDetail | null;
   isLoading: boolean;
-  error: string | null;
+  error: AppError | null;
 
   setContext: (context: VulcanContext) => void;
   loadDashboardData: () => Promise<void>;
@@ -31,9 +42,28 @@ interface VulcanState {
   loadMessageDetails: (key: string) => Promise<void>;
   clearSelectedMessage: () => void;
   logout: () => void;
+  clearError: () => void;
 }
 
-export const useVulcanStore = create<VulcanState>((set, get) => ({
+function classifyError(e: unknown): AppError {
+  if (e instanceof ValidationError) {
+    return { message: e.message, type: 'validation' };
+  }
+  const axiosErr = e as { code?: string; message?: string; response?: { status?: number } };
+  if (axiosErr.code === 'ECONNABORTED' || axiosErr.code === 'ERR_NETWORK' || !axiosErr.response) {
+    return { message: 'Brak połączenia z internetem lub serwer nie odpowiada.', type: 'network' };
+  }
+  if (axiosErr.response?.status === 401 || axiosErr.response?.status === 403) {
+    return { message: 'Sesja wygasła. Zaloguj się ponownie.', type: 'auth' };
+  }
+  return { message: axiosErr.message || 'Wystąpił nieznany błąd.', type: 'unknown' };
+}
+
+export const useVulcanStore = create<
+  VulcanState & {
+    initializeSession: () => Promise<void>;
+  }
+>((set, get) => ({
   context: null,
   repository: null,
   luckyNumber: '-',
@@ -49,10 +79,14 @@ export const useVulcanStore = create<VulcanState>((set, get) => ({
   isLoading: false,
   error: null,
 
-  setContext: (context: VulcanContext) => {
-    set({ 
-      context, 
-      repository: new VulcanRepository(context) 
+  setContext: async (context: VulcanContext) => {
+    set({
+      context,
+      repository: new VulcanRepository(context),
+      error: null,
+    });
+    await saveSession(context).catch(() => {
+      // Nie blokujemy aplikacji jeśli secure store niedostępny
     });
   },
 
@@ -65,11 +99,11 @@ export const useVulcanStore = create<VulcanState>((set, get) => ({
         repository.getLuckyNumber(),
         repository.getDashboardTimetable(),
         repository.getDashboardExams(),
-        repository.getDashboardAttendance()
+        repository.getDashboardAttendance(),
       ]);
 
       const attItems = attendance.oddzialy || [];
-      const obecnosci = attItems.filter(it => it.kategoriaFrekwencji === 1).length;
+      const obecnosci = attItems.filter((it) => it.kategoriaFrekwencji === 1).length;
       const proc = attItems.length > 0 ? (obecnosci / attItems.length) * 100 : 0;
 
       set({
@@ -77,10 +111,10 @@ export const useVulcanStore = create<VulcanState>((set, get) => ({
         dashboardLessons: lessons,
         dashboardExams: exams,
         attendancePercent: proc,
-        isLoading: false
+        isLoading: false,
       });
     } catch (e: any) {
-      set({ isLoading: false, error: e.message });
+      set({ isLoading: false, error: classifyError(e) });
     }
   },
 
@@ -97,12 +131,12 @@ export const useVulcanStore = create<VulcanState>((set, get) => ({
 
       const formatDate = (d: Date) => d.toISOString().split('T')[0];
       const lessons = await repository.getTimetable(
-        `${formatDate(monday)}T00:00:00.000Z`, 
-        `${formatDate(sunday)}T23:59:59.999Z`
+        `${formatDate(monday)}T00:00:00`,
+        `${formatDate(sunday)}T23:59:59`
       );
 
       const grouped: Record<string, Lesson[]> = {};
-      lessons.forEach(l => {
+      lessons.forEach((l) => {
         const key = (l.data || l.dataOd || '').substring(0, 10);
         if (!grouped[key]) grouped[key] = [];
         grouped[key].push(l);
@@ -110,7 +144,7 @@ export const useVulcanStore = create<VulcanState>((set, get) => ({
 
       set({ fullTimetable: grouped, isLoading: false });
     } catch (e: any) {
-      set({ isLoading: false, error: e.message });
+      set({ isLoading: false, error: classifyError(e) });
     }
   },
 
@@ -122,25 +156,25 @@ export const useVulcanStore = create<VulcanState>((set, get) => ({
       set({ classificationPeriods: periods });
       if (periods.length > 0 && selectedPeriodId === null) {
         const last = periods[periods.length - 1];
-        const id = last.id || last.Id;
+        const id = last.id ?? last.Id;
         if (id !== undefined) {
           get().selectPeriod(id);
         }
       }
     } catch (e: any) {
-      set({ error: e.message });
+      set({ error: classifyError(e) });
     }
   },
 
   selectPeriod: async (id: number) => {
     const { repository } = get();
     if (!repository) return;
-    set({ selectedPeriodId: id, isLoading: true });
+    set({ selectedPeriodId: id, isLoading: true, error: null });
     try {
       const grades = await repository.getGrades(id);
       set({ grades, isLoading: false });
     } catch (e: any) {
-      set({ isLoading: false, error: e.message });
+      set({ isLoading: false, error: classifyError(e) });
     }
   },
 
@@ -152,7 +186,7 @@ export const useVulcanStore = create<VulcanState>((set, get) => ({
       const msgs = await repository.getReceivedMessages();
       set({ messages: msgs, isLoading: false });
     } catch (e: any) {
-      set({ isLoading: false, error: e.message });
+      set({ isLoading: false, error: classifyError(e) });
     }
   },
 
@@ -164,13 +198,18 @@ export const useVulcanStore = create<VulcanState>((set, get) => ({
       const detail = await repository.getMessageDetails(key);
       set({ selectedMessage: detail, isLoading: false });
     } catch (e: any) {
-      set({ isLoading: false, error: e.message });
+      set({ isLoading: false, error: classifyError(e) });
     }
   },
 
   clearSelectedMessage: () => set({ selectedMessage: null }),
 
-  logout: () => {
+  clearError: () => set({ error: null }),
+
+  logout: async () => {
+    await clearSession().catch(() => {
+      // Nie blokujemy aplikacji jeśli secure store niedostępny
+    });
     set({
       context: null,
       repository: null,
@@ -185,7 +224,17 @@ export const useVulcanStore = create<VulcanState>((set, get) => ({
       messages: [],
       selectedMessage: null,
       isLoading: false,
-      error: null
+      error: null,
     });
-  }
+  },
+
+  initializeSession: async () => {
+    const session = await loadSession();
+    if (session) {
+      set({
+        context: session,
+        repository: new VulcanRepository(session),
+      });
+    }
+  },
 }));
