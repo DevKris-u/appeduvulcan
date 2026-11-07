@@ -1,7 +1,16 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { Buffer } from 'buffer';
 import { VulcanContext } from '../models/VulcanModels';
+
+/* Dekodowanie podwójnego base64 bez Node.js 'buffer' (niedostępny w React Native). */
+function base64ToUtf8(base64: string): string {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new TextDecoder().decode(bytes);
+}
 
 export class VulcanLoginHelper {
   private axiosInstance = axios.create({
@@ -100,8 +109,8 @@ export class VulcanLoginHelper {
 
   private extractIdsFromKey(contextKey: string): [string, string] {
     try {
-      const step1 = Buffer.from(contextKey, 'base64').toString('utf-8');
-      const step2 = Buffer.from(step1, 'base64').toString('utf-8');
+      const step1 = base64ToUtf8(contextKey);
+      const step2 = base64ToUtf8(step1);
       const parts = step2.split('-');
       return [parts[0], parts[1]];
     } catch (e) {
